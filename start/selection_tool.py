@@ -6,80 +6,91 @@ Function:
   Provides pixel selection and cropping tools for images, handles the cropping of selected areas.
 
 Dependencies:
-  os
+  tkinter
   PIL
+  
+"""
 
 
-import os
-from PIL import Image, ImageDraw, ImageTk
+# celection_tool.py
 
-class SelectionTool:
-    def __init__(self, image_path):
-        if not os.path.exists(image_path) or image_path is None:
-            raise ValueError(f"Invalid image path: {image_path}")
-        
+import tkinter as tk
+from PIL import Image, ImageTk # type: ignore
+
+class SelectionTool(tk.Frame):
+    def __init__(self, parent, image_path, callback):
+        super().__init__(parent)
         self.image_path = image_path
-        self.image = Image.open(image_path)
-        self.drawn_image = self.image.copy()
-        self.draw = ImageDraw.Draw(self.drawn_image)
-        self.selections = []
+        self.callback = callback
+        self.selected_areas = []  # Store selected areas
+        self.start_x = self.start_y = 0
+        self.rect = None
+        self.load_image()  # Load and scale image
+        self.setup_tool()  # Initialize selection tool components
 
-    def add_selection(self, selection):
-        #Add a selection rectangle to the image.
-        
-        #Args:
-        #    selection (tuple): A tuple of (left, upper, right, lower) representing the bounding box of the selection.
-        
-        if not self._is_selection_valid(selection):
-            raise ValueError("Invalid selection coordinates.")
-        
-        self.selections.append(selection)
-        self.draw.rectangle(selection, outline="red", width=2)
+    def load_image(self):
+        original_image = Image.open(self.image_path)
+        width, height = original_image.size
+        new_height = 500  # Set height limit
 
-    def clear_selections(self):
-        #Clear all selections.
-        self.selections = []
-        self.drawn_image = self.image.copy()
+        if height > new_height:
+            scale_factor = new_height / height
+            new_width = int(width * scale_factor)
+            new_height = new_height
+        else:
+            new_width, new_height = width, height
 
-    def save_cropped_image(self, output_path):
-        #Save a cropped image based on selections.
-        
-        #Args:
-        #    output_path (str): The path where the cropped image will be saved.
-        
-        #Raises:
-        #    ValueError: If there are no selections to crop.
-        
-        if not self.selections:
-            raise ValueError("No selections to crop.")
-        
-        cropped_image = Image.new("RGBA", self.image.size, (0, 0, 0, 0))
-        
-        for selection in self.selections:
-            cropped_part = self.image.crop(selection)
-            cropped_image.paste(cropped_part, selection)
+        self.image = original_image.resize((new_width, new_height), Image.LANCZOS)
+        self.image_tk = ImageTk.PhotoImage(self.image)
 
-        # Save the image in PNG format by default, but you can change the format if needed
-        cropped_image.save(output_path, format="PNG")
+    def setup_tool(self):
+        self.canvas = tk.Canvas(self, width=self.image.width, height=self.image.height)
+        self.canvas.pack()
+        self.canvas.create_image(0, 0, anchor="nw", image=self.image_tk)
 
-    def get_tk_image(self):
-        #Convert the drawn image to a format usable by Tkinter.
+        # Bind mouse events for selection
+        self.canvas.bind("<ButtonPress-1>", self.start_selection)
+        self.canvas.bind("<B1-Motion>", self.update_selection)
+        self.canvas.bind("<ButtonRelease-1>", self.end_selection)
 
-        #Returns:
-        #    ImageTk.PhotoImage: A Tkinter-compatible image.
-        
-        #return ImageTk.PhotoImage(self.drawn_image)
+        self.select_button = tk.Button(self, text="Select answers", command=self.on_select_answers)
+        self.select_button.pack(pady=10)
+        self.select_button.pack_forget()  # Initially hidden
 
-    def _is_selection_valid(self, selection):
-        #Check if the selection is valid (within image bounds).
-        
-        #Args:
-        #    selection (tuple): The selection coordinates to check.
-        
-        #Returns:
-        #    bool: True if the selection is valid, False otherwise.
-        
-        left, upper, right, lower = selection
-        return (0 <= left < right <= self.image.width) and (0 <= upper < lower <= self.image.height)
-    
-      """
+        # Bind Ctrl+Z for undo
+        self.master.bind("<Control-z>", self.undo_selection)
+
+    def start_selection(self, event):
+        self.start_x, self.start_y = event.x, event.y
+        if self.rect:
+            self.canvas.delete(self.rect)
+
+    def update_selection(self, event):
+        cur_x, cur_y = event.x, event.y
+        if self.rect:
+            self.canvas.delete(self.rect)
+        self.rect = self.canvas.create_rectangle(self.start_x, self.start_y, cur_x, cur_y, outline="red")
+
+    def end_selection(self, event):
+        end_x, end_y = event.x, event.y
+        selected_area = (self.start_x, self.start_y, end_x, end_y)
+        self.selected_areas.append(selected_area)
+        self.redraw_canvas()  # Show the selected area on canvas
+        self.select_button.pack()
+
+    def undo_selection(self, event=None):
+        if self.selected_areas:
+            self.selected_areas.pop()
+            self.redraw_canvas()
+
+    def redraw_canvas(self):
+        self.canvas.delete("all")
+        self.canvas.create_image(0, 0, anchor="nw", image=self.image_tk)
+        for area in self.selected_areas:
+            self.canvas.create_rectangle(area, outline="red", width=2)
+        self.select_button.pack() if self.selected_areas else self.select_button.pack_forget()
+
+    def on_select_answers(self):
+        if self.selected_areas:
+            print(f"Selected areas: {self.selected_areas}")
+            self.callback(self.selected_areas)

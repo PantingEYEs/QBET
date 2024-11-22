@@ -11,6 +11,7 @@ Dependencies:
 
 """
 
+
 # ocr_integration.py
 
 import os

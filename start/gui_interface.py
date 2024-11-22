@@ -6,13 +6,17 @@ Function:
   Contains functions for building the GUI, defining buttons, and layout for each interface view.
 
 Dependencies:
-  tkinter, PIL
+  tkinter
+  PIL
+
 """
+
 
 # gui_interface.py
 
 import tkinter as tk
-from PIL import Image, ImageTk
+from tkinter import Canvas
+from PIL import Image, ImageTk # type: ignore
 from browse_handler import BrowseHandler
 
 class Interface1(tk.Frame):
@@ -51,14 +55,14 @@ class Interface1(tk.Frame):
             self.display_initializing()
 
     def update_text_animation(self):
-        """Animate the 'Initializing' text with dots."""
+        #Animate the 'Initializing' text with dots.
         self.dot_count = (self.dot_count + 1) % 7  # Loop from 0 to 6
         dots = '.' * self.dot_count
         self.status_label.config(text=f"Initializing{dots}")
         self.after(500, self.update_text_animation)  # Update every 500ms
 
     def display_initializing(self):
-        """Display the initializing state."""
+        #Display the initializing state.
         for widget in self.winfo_children():
             widget.destroy()
     
@@ -68,7 +72,7 @@ class Interface1(tk.Frame):
         self.update_text_animation()  # Start the text animation
 
     def show_next_button(self, num_images):
-        """Display the next button with the number of images selected."""
+        #Display the next button with the number of images selected.
         for widget in self.winfo_children():
             widget.destroy()
         self.status_label = tk.Label(self, text=f"{num_images} images selected.")
@@ -77,7 +81,7 @@ class Interface1(tk.Frame):
         self.next_button.pack(pady=10)
 
     def on_next_interface(self):
-        """Transition to the next interface."""
+        #Transition to the next interface.
         self.start_processing_callback = None  # Disable callback to prevent re-triggering
         self.pack_forget()  # Hide this frame
 
@@ -112,7 +116,7 @@ class Interface2(tk.Frame):
         # Canvas for displaying the image
         self.canvas = tk.Canvas(self, width=new_width, height=new_height)
         self.canvas.pack()
-        
+
         # Load image into the canvas
         self.canvas.create_image(0, 0, anchor="nw", image=self.image_tk)
 
@@ -124,38 +128,68 @@ class Interface2(tk.Frame):
         # Initialize selection coordinates
         self.start_x = self.start_y = 0
         self.rect = None
+        self.selected_areas = []  # Store multiple selected areas
 
         # Next and Back buttons
+        self.select_button = tk.Button(self, text="Select answers", command=self.on_select_answers)
+        self.select_button.pack(pady=10)
+        self.select_button.pack_forget()  # Initially hide the button
+
         self.next_button = tk.Button(self, text="Next", command=self.on_next)
         self.next_button.pack(side=tk.RIGHT, padx=5, pady=10)
         self.back_button = tk.Button(self, text="Back", command=self.on_back)
         self.back_button.pack(side=tk.LEFT, padx=5, pady=10)
-        
+
+        # Control-Z binding
+        self.master.bind("<Control-z>", self.undo_selection)
+
     def start_selection(self, event):
-        """Start selection rectangle."""
+        #Start selection rectangle.
         self.start_x, self.start_y = event.x, event.y
         if self.rect:
             self.canvas.delete(self.rect)
 
     def update_selection(self, event):
-        """Update selection rectangle as mouse moves."""
+        #Update selection rectangle as mouse moves.
         cur_x, cur_y = event.x, event.y
         if self.rect:
             self.canvas.delete(self.rect)
         self.rect = self.canvas.create_rectangle(self.start_x, self.start_y, cur_x, cur_y, outline="red")
 
     def end_selection(self, event):
-        """Handle the end of selection. Save the selected area."""
+        # Finalize selection and store the selected area.
         end_x, end_y = event.x, event.y
         selected_area = (self.start_x, self.start_y, end_x, end_y)  # Store selected area
-        self.selection_callback(selected_area)  # Call selection callback
+        self.selected_areas.append(selected_area)  # Append to selected areas
+        self.select_button.pack()  # Show button if at least one area is selected
+        self.update_canvas()
+
+    def undo_selection(self, event=None):
+        #Undo the last selection.
+        if self.selected_areas:
+            self.selected_areas.pop()  # Remove the last selection
+            self.canvas.delete("all")  # Clear canvas
+            self.canvas.create_image(0, 0, anchor="nw", image=self.image_tk)  # Redraw image
+            self.select_button.pack_forget()  # Hide button if no selection left
+            self.update_canvas()  # Update canvas to redraw remaining selections
+
+    def update_canvas(self):
+        #Redraw all selected areas on the canvas.
+        for area in self.selected_areas:
+            self.canvas.create_rectangle(area, outline="red")
+
+    def on_select_answers(self):
+        #Handle the action for selecting answers.
+        # Process the selected areas and call the callback
+        print(f"Selected areas: {self.selected_areas}")
+        self.selection_callback(self.selected_areas)  # Call the callback function
 
     def on_next(self):
-        """Callback for next button."""
+        # Callback for next button.
         self.next_callback()
 
     def on_back(self):
-        """Callback for back button."""
+        # Callback for back button.
         self.back_callback()
 
 class Interface3(tk.Frame):
@@ -171,7 +205,7 @@ class Interface3(tk.Frame):
         self.next_button.pack(pady=10)
 
     def refresh_content(self):
-        """Refresh QB.md content display."""
+        # Refresh QB.md content display.
         self.qb_content.config(state=tk.NORMAL)
         self.qb_content.delete("1.0", tk.END)
         
@@ -184,5 +218,5 @@ class Interface3(tk.Frame):
         self.qb_content.config(state=tk.DISABLED)
 
     def on_next(self):
-        """Handle the Next button click to go back to Interface 2."""
+        # Handle the Next button click to go back to Interface 2.
         self.next_callback()
